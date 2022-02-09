@@ -1,0 +1,37 @@
+pipeline {
+	agent any
+	environment { 
+			PATH="/opt/maven/bin:$PATH"
+			LMS = "/home/jenkins/workspace/LMS_Service_Test/lms"
+			WORKSPACE= "/home/jenkins/workspace/LMS_Service_Test/lms/lms-web"
+			WP="/home/jenkins/workspace/LMS_Service_Test/lms/lms-web/src/main/resources"
+			}
+	
+	stages {
+		stage('Preparation') {
+		    steps {
+			    git branch: 'master', credentialsId: 'Git_User_Jenkins', url: 'https://gitlab.com/egenlms/lmscore.git'
+		    }
+		}
+	stage('Build_lms_web') {
+			steps {
+				sh 'cd $WP && rm -fr application.properties && cp /home/application.properties $WP/ && cd $LMS/ && mvn clean install && cd $WORKSPACE/ && mvn clean install -Ptest'
+			}
+		}
+	    stage('Deployed_148') {
+            environment { 
+			    WS= "/opt/tomcat/apache-tomcat-9.0.45/webapps"
+		    }
+		    steps {
+			    sshagent(['SSH_USER_148']) {
+					sh '''ssh -o StrictHostKeyChecking=no root@116.68.206.148 systemctl stop tomcat
+                    ssh -o StrictHostKeyChecking=no root@116.68.206.148 rm -fr $WS/lms-web $WS/lms-web.war 
+                    scp -o StrictHostKeyChecking=no $WORKSPACE/target/lms-web.war root@116.68.206.148:$WS/
+                    ssh -o StrictHostKeyChecking=no root@116.68.206.148 chown tomcat:tomcat $WS/lms-web.war
+                    ssh -o StrictHostKeyChecking=no root@116.68.206.148 chmod 775 $WS/lms-web.war
+                    ssh -o StrictHostKeyChecking=no root@116.68.206.148 systemctl start tomcat'''
+			    }
+		    }
+	    }
+	}
+}

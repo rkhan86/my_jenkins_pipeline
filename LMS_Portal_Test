@@ -1,0 +1,39 @@
+pipeline {
+	agent any
+	environment { 
+			PATH="/opt/gradle/bin:$PATH"
+			WORKSPACE= "/home/jenkins/workspace/LMS_Portal_Test"
+			}
+	
+	stages {
+		stage('Preparation') {
+		    steps {
+			    git branch: 'master', credentialsId: 'Git_User_Jenkins', url: 'https://gitlab.com/egenlms/lmsclient.git'
+			    sh 'cd $WORKSPACE/ && rm -fr lms-client lms-client.zip'
+		    }
+		}
+		stage('Build_Client') {
+			environment { 
+					NODE_OPTIONS="--max-old-space-size=4096"
+			}
+			steps {
+				sh 'cd $WORKSPACE && npm install && ng build --prod --base-href /lms-client/ && mv dist lms-client && zip -r lms-client.zip lms-client/'
+			}
+		}
+		stage('Deployed_148') {
+	        environment { 
+					WS= "/opt/tomcat/apache-tomcat-9.0.45/webapps"
+			}
+			steps {
+				sshagent(['SSH_USER_148']) {
+					sh '''ssh -o StrictHostKeyChecking=no root@116.68.206.148 systemctl stop tomcat
+                    ssh -o StrictHostKeyChecking=no root@116.68.206.148 rm -fr $WS/lms-client $WS/lms-client.zip
+                    scp -o StrictHostKeyChecking=no $WORKSPACE/lms-client.zip root@116.68.206.148:$WS/
+                    ssh -o StrictHostKeyChecking=no root@116.68.206.148 unzip $WS/lms-client.zip -d $WS/
+                    ssh -o StrictHostKeyChecking=no root@116.68.206.148 chown -R tomcat:tomcat $WS/lms-client
+                    ssh -o StrictHostKeyChecking=no root@116.68.206.148 systemctl start tomcat'''
+				}
+			}
+		}		
+	}
+}
